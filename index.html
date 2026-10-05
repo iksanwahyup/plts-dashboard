@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoring PLTS Real-Time</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #eef2f5; margin: 0; padding: 20px; color: #333; }
+        .wrapper { max-width: 900px; margin: auto; }
+        .card { background: #fff; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .row { display: flex; justify-content: space-between; align-items: center; }
+        .val { font-size: 32px; font-weight: bold; }
+        .val-v { color: #007bff; }
+        .val-a { color: #e83e8c; }
+        .chart-box { position: relative; height: 260px; width: 100%; margin-top: 15px; }
+        #debugLog { background: #222; color: #00ff66; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 13px; max-height: 120px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+    <h2 style="text-align: center;">DASHBOARD PLTS REAL-TIME</h2>
+    
+    <!-- Kotak Log Langsung di Layar -->
+    <div class="card" style="padding: 10px;">
+        <strong>Status Diagnosa Sistem:</strong>
+        <div id="debugLog">Memulai sistem...</div>
+    </div>
+
+    <!-- Panel Tegangan -->
+    <div class="card">
+        <div class="row">
+            <div><strong>Tegangan Aki (ID 10)</strong></div>
+            <div class="val val-v"><span id="txtV">0.00</span> <small style="font-size:16px;">V</small></div>
+        </div>
+        <div class="chart-box"><canvas id="cVolt"></canvas></div>
+    </div>
+
+    <!-- Panel Arus -->
+    <div class="card">
+        <div class="row">
+            <div><strong>Arus Beban (ID 11)</strong></div>
+            <div class="val val-a"><span id="txtA">0.00</span> <small style="font-size:16px;">A</small></div>
+        </div>
+        <div class="chart-box"><canvas id="cArus"></canvas></div>
+    </div>
+</div>
+
+<script>
+    function logPesan(pesan) {
+        console.log(pesan);
+        const box = document.getElementById("debugLog");
+        if (box) {
+            box.innerHTML += "<br>> " + pesan;
+            box.scrollTop = box.scrollHeight;
+        }
+    }
+
+    logPesan("Memuat konfigurasi Firebase...");
+
+    const firebaseConfig = {
+        databaseURL: "https://plts-monitoring-b6c83-default-rtdb.asia-southeast1.firebasedatabase.app"
+    };
+
+    try {
+        firebase.initializeApp(firebaseConfig);
+        var db = firebase.database();
+        logPesan("Inisialisasi Firebase berhasil.");
+    } catch (e) {
+        logPesan("Gagal inisialisasi Firebase: " + e.message);
+    }
+
+    // Pantau status koneksi soket
+    db.ref(".info/connected").on("value", function(snap) {
+        if (snap.val() === true) {
+            logPesan("Status Cloud: TERHUBUNG (WebSocket Aktif)");
+        } else {
+            logPesan("Status Cloud: Terputus / Mencari sinyal...");
+        }
+    });
+
+    function buatChart(ctx, label, warna) {
+        return new Chart(ctx, {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: label, data: [], borderColor: warna, backgroundColor: warna + '1A', fill: true, tension: 0.2 }] },
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    const chartV = buatChart(document.getElementById('cVolt').getContext('2d'), 'Tegangan (V)', '#007bff');
+    const chartA = buatChart(document.getElementById('cArus').getContext('2d'), 'Arus (A)', '#e83e8c');
+
+    function jamSekarang() {
+        const d = new Date();
+        return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0') + ':' + d.getSeconds().toString().padStart(2, '0');
+    }
+
+    function tambahTitik(chart, nilai) {
+        if (chart.data.labels.length > 20) {
+            chart.data.labels.shift();
+            chart.data.datasets[0].data.shift();
+        }
+        chart.data.labels.push(jamSekarang());
+        chart.data.datasets[0].data.push(nilai);
+        chart.update();
+    }
+
+    // Mendengarkan data di node /monitoring
+    db.ref('/monitoring').on('value', function(snap) {
+        const data = snap.val();
+        logPesan("Pembaruan Data Diterima: " + JSON.stringify(data));
+        if (data) {
+            if (data.tegangan !== undefined) {
+                const v = parseFloat(data.tegangan);
+                document.getElementById('txtV').innerText = v.toFixed(2);
+                tambahTitik(chartV, v);
+            }
+            if (data.arus !== undefined) {
+                const a = parseFloat(data.arus);
+                document.getElementById('txtA').innerText = a.toFixed(2);
+                tambahTitik(chartA, a);
+            }
+        }
+    }, function(error) {
+        logPesan("Error Akses Firebase (Cek Rules): " + error.message);
+    });
+</script>
+</body>
+</html>
