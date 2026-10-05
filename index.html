@@ -8,26 +8,83 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
-        body { font-family: sans-serif; background: #eef2f5; margin: 0; padding: 20px; color: #333; }
-        .wrapper { max-width: 900px; margin: auto; }
-        .card { background: #fff; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-        .row { display: flex; justify-content: space-between; align-items: center; }
-        .val { font-size: 32px; font-weight: bold; }
-        .val-v { color: #007bff; }
-        .val-a { color: #e83e8c; }
-        .chart-box { position: relative; height: 260px; width: 100%; margin-top: 15px; }
-        #debugLog { background: #222; color: #00ff66; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 13px; max-height: 120px; overflow-y: auto; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #eef2f5; 
+            margin: 0; 
+            padding: 15px; 
+            color: #333; 
+        }
+        .wrapper { 
+            max-width: 900px; 
+            margin: auto; 
+        }
+        .status-badge { 
+            display: inline-block; 
+            background: #6c757d; 
+            color: white; 
+            padding: 6px 14px; 
+            border-radius: 20px; 
+            font-size: 13px; 
+            margin-bottom: 15px; 
+            font-weight: bold; 
+        }
+        .status-online { 
+            background: #28a745; 
+        }
+        .card { 
+            background: #fff; 
+            border-radius: 12px; 
+            padding: 18px; 
+            margin-bottom: 18px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06); 
+        }
+        .row { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .val { 
+            font-size: 32px; 
+            font-weight: bold; 
+        }
+        .val-v { 
+            color: #007bff; 
+        }
+        .val-a { 
+            color: #e83e8c; 
+        }
+        .chart-box { 
+            position: relative; 
+            height: 260px; 
+            width: 100%; 
+            margin-top: 15px; 
+        }
+        #debugLog { 
+            background: #222; 
+            color: #00ff66; 
+            padding: 10px; 
+            border-radius: 6px; 
+            font-family: monospace; 
+            font-size: 12px; 
+            max-height: 100px; 
+            overflow-y: auto; 
+            margin-top: 5px; 
+        }
     </style>
 </head>
 <body>
 
 <div class="wrapper">
-    <h2 style="text-align: center;">DASHBOARD PLTS REAL-TIME</h2>
-    
-    <!-- Kotak Log Langsung di Layar -->
-    <div class="card" style="padding: 10px;">
-        <strong>Status Diagnosa Sistem:</strong>
-        <div id="debugLog">Memulai sistem...</div>
+    <h2 style="text-align: center; margin-bottom: 5px;">DASHBOARD MONITORING PLTS</h2>
+    <div style="text-align: center;">
+        <span id="statusKoneksi" class="status-badge">Menghubungkan ke Cloud...</span>
+    </div>
+
+    <!-- Kotak Pemantau Log Sistem -->
+    <div class="card" style="padding: 12px;">
+        <strong style="font-size: 13px;">Status Diagnosa Sistem:</strong>
+        <div id="debugLog">Memulai koneksi...</div>
     </div>
 
     <!-- Panel Tegangan -->
@@ -36,7 +93,9 @@
             <div><strong>Tegangan Aki (ID 10)</strong></div>
             <div class="val val-v"><span id="txtV">0.00</span> <small style="font-size:16px;">V</small></div>
         </div>
-        <div class="chart-box"><canvas id="cVolt"></canvas></div>
+        <div class="chart-box">
+            <canvas id="cVolt"></canvas>
+        </div>
     </div>
 
     <!-- Panel Arus -->
@@ -45,7 +104,9 @@
             <div><strong>Arus Beban (ID 11)</strong></div>
             <div class="val val-a"><span id="txtA">0.00</span> <small style="font-size:16px;">A</small></div>
         </div>
-        <div class="chart-box"><canvas id="cArus"></canvas></div>
+        <div class="chart-box">
+            <canvas id="cArus"></canvas>
+        </div>
     </div>
 </div>
 
@@ -59,8 +120,7 @@
         }
     }
 
-    logPesan("Memuat konfigurasi Firebase...");
-
+    // Konfigurasi Database Firebase (Region Singapore)
     const firebaseConfig = {
         databaseURL: "https://plts-monitoring-b6c83-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
@@ -68,50 +128,81 @@
     try {
         firebase.initializeApp(firebaseConfig);
         var db = firebase.database();
-        logPesan("Inisialisasi Firebase berhasil.");
+        logPesan("Inisialisasi Firebase siap.");
     } catch (e) {
-        logPesan("Gagal inisialisasi Firebase: " + e.message);
+        logPesan("Gagal inisialisasi: " + e.message);
     }
 
-    // Pantau status koneksi soket
+    // Pemantau Status WebSocket Firebase
     db.ref(".info/connected").on("value", function(snap) {
+        const statusEl = document.getElementById("statusKoneksi");
         if (snap.val() === true) {
-            logPesan("Status Cloud: TERHUBUNG (WebSocket Aktif)");
+            statusEl.innerText = "🟢 Real-Time Cloud Aktif";
+            statusEl.className = "status-badge status-online";
+            logPesan("Status Cloud: TERHUBUNG");
         } else {
-            logPesan("Status Cloud: Terputus / Mencari sinyal...");
+            statusEl.innerText = "🔴 Koneksi Terputus / Mencari Sinyal";
+            statusEl.className = "status-badge";
+            logPesan("Status Cloud: Menghubungkan...");
         }
     });
 
+    // Inisialisasi Chart dengan Titik & Garis Jelas
     function buatChart(ctx, label, warna) {
         return new Chart(ctx, {
             type: 'line',
-            data: { labels: [], datasets: [{ label: label, data: [], borderColor: warna, backgroundColor: warna + '1A', fill: true, tension: 0.2 }] },
-            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            data: { 
+                labels: [], 
+                datasets: [{ 
+                    label: label, 
+                    data: [], 
+                    borderColor: warna, 
+                    backgroundColor: warna + '1A', 
+                    fill: true, 
+                    tension: 0.25,
+                    borderWidth: 2.5,
+                    pointRadius: 4.5,
+                    pointHoverRadius: 7
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false,
+                scales: { 
+                    y: { 
+                        beginAtZero: true 
+                    } 
+                } 
+            }
         });
     }
 
     const chartV = buatChart(document.getElementById('cVolt').getContext('2d'), 'Tegangan (V)', '#007bff');
     const chartA = buatChart(document.getElementById('cArus').getContext('2d'), 'Arus (A)', '#e83e8c');
 
-    function jamSekarang() {
+    function ambilJam() {
         const d = new Date();
-        return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0') + ':' + d.getSeconds().toString().padStart(2, '0');
+        return d.getHours().toString().padStart(2, '0') + ':' + 
+               d.getMinutes().toString().padStart(2, '0') + ':' + 
+               d.getSeconds().toString().padStart(2, '0');
     }
 
     function tambahTitik(chart, nilai) {
+        // Menyimpan maksimal 20 titik di layar agar grafik tetap rapi
         if (chart.data.labels.length > 20) {
             chart.data.labels.shift();
             chart.data.datasets[0].data.shift();
         }
-        chart.data.labels.push(jamSekarang());
+        chart.data.labels.push(ambilJam());
         chart.data.datasets[0].data.push(nilai);
         chart.update();
     }
 
-    // Mendengarkan data di node /monitoring
+    // Mendengarkan Node Realtime /monitoring
     db.ref('/monitoring').on('value', function(snap) {
         const data = snap.val();
-        logPesan("Pembaruan Data Diterima: " + JSON.stringify(data));
+        logPesan("Data masuk: " + JSON.stringify(data));
+        
         if (data) {
             if (data.tegangan !== undefined) {
                 const v = parseFloat(data.tegangan);
@@ -124,8 +215,8 @@
                 tambahTitik(chartA, a);
             }
         }
-    }, function(error) {
-        logPesan("Error Akses Firebase (Cek Rules): " + error.message);
+    }, function(err) {
+        logPesan("Error: " + err.message);
     });
 </script>
 </body>
