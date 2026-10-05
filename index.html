@@ -120,7 +120,6 @@
         }
     }
 
-    // Konfigurasi Database Firebase (Region Singapore)
     const firebaseConfig = {
         databaseURL: "https://plts-monitoring-b6c83-default-rtdb.asia-southeast1.firebasedatabase.app"
     };
@@ -133,7 +132,11 @@
         logPesan("Gagal inisialisasi: " + e.message);
     }
 
-    // Pemantau Status WebSocket Firebase
+    // Variabel penampung nilai sensor terakhir
+    let teganganTerkini = 0.0;
+    let arusTerkini = 0.0;
+
+    // Status WebSocket Firebase
     db.ref(".info/connected").on("value", function(snap) {
         const statusEl = document.getElementById("statusKoneksi");
         if (snap.val() === true) {
@@ -147,7 +150,6 @@
         }
     });
 
-    // Inisialisasi Chart dengan Titik & Garis Jelas
     function buatChart(ctx, label, warna) {
         return new Chart(ctx, {
             type: 'line',
@@ -159,13 +161,14 @@
                     borderColor: warna, 
                     backgroundColor: warna + '1A', 
                     fill: true, 
-                    tension: 0.25,
+                    tension: 0.2,
                     borderWidth: 2.5,
-                    pointRadius: 4.5,
-                    pointHoverRadius: 7
+                    pointRadius: 3,
+                    pointHoverRadius: 6
                 }] 
             },
             options: { 
+                animation: false, // Animasi dimatikan agar pergeseran grafik mulus tanpa lag
                 responsive: true, 
                 maintainAspectRatio: false,
                 scales: { 
@@ -188,8 +191,8 @@
     }
 
     function tambahTitik(chart, nilai) {
-        // Menyimpan maksimal 20 titik di layar agar grafik tetap rapi
-        if (chart.data.labels.length > 20) {
+        // Tampilkan 15 titik terakhir yang terus bergeser
+        if (chart.data.labels.length >= 15) {
             chart.data.labels.shift();
             chart.data.datasets[0].data.shift();
         }
@@ -198,26 +201,31 @@
         chart.update();
     }
 
-    // Mendengarkan Node Realtime /monitoring
+    // 1. Simpan nilai saat Firebase menerima pembaruan dari ESP8266
     db.ref('/monitoring').on('value', function(snap) {
         const data = snap.val();
-        logPesan("Data masuk: " + JSON.stringify(data));
+        logPesan("Pembaruan Firebase: " + JSON.stringify(data));
         
         if (data) {
             if (data.tegangan !== undefined) {
-                const v = parseFloat(data.tegangan);
-                document.getElementById('txtV').innerText = v.toFixed(2);
-                tambahTitik(chartV, v);
+                teganganTerkini = parseFloat(data.tegangan);
+                document.getElementById('txtV').innerText = teganganTerkini.toFixed(2);
             }
             if (data.arus !== undefined) {
-                const a = parseFloat(data.arus);
-                document.getElementById('txtA').innerText = a.toFixed(2);
-                tambahTitik(chartA, a);
+                arusTerkini = parseFloat(data.arus);
+                document.getElementById('txtA').innerText = arusTerkini.toFixed(2);
             }
         }
     }, function(err) {
         logPesan("Error: " + err.message);
     });
+
+    // 2. Mesin Pemicu Gerak Grafik Otomatis (Setiap 2 Detik Sekali)
+    // Walaupun sensor bernilai tetap, grafik akan otomatis menarik garis waktu ke kanan
+    setInterval(function() {
+        tambahTitik(chartV, teganganTerkini);
+        tambahTitik(chartA, arusTerkini);
+    }, 2000);
 </script>
 </body>
 </html>
